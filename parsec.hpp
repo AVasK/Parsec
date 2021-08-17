@@ -335,7 +335,7 @@ struct delimited_string : ParseScheme {
 };
 
 template <>
-struct value<std::string> {
+struct value<std::string> : ParseScheme {
     enum {returns_value = true};
     using ret_type = std::string;
 
