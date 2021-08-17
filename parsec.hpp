@@ -2,6 +2,13 @@
 #include <type_traits>
 #include <array>
 #include <cstring> //strlen
+#include "common_parsers.hpp"
+
+#define PARSE_SCHEME(T)     \
+template <>                 \
+template <typename Stream>  \
+auto value< T >::parse(Stream& stream) const -> T
+
 
 namespace Parsec {
 
@@ -293,6 +300,9 @@ struct value : ParseScheme {
 
     template <typename Stream>
     T parse(Stream& stream) const;
+
+    template <typename Stream>
+    void encode(Stream& stream, T value) const;
 };
 
 struct delimited_string : ParseScheme {
@@ -331,6 +341,11 @@ struct delimited_string : ParseScheme {
         return str;
     }
 
+    template <typename Stream>
+    void encode(Stream& stream, std::string value) const {
+        stream << value << delimiter;
+    }
+
     const char * delimiter;
 };
 
@@ -356,34 +371,39 @@ struct value<std::string> : ParseScheme {
     }
 
     auto then(const char * sep) {
-        return delimited_string(sep);
+       return delimited_string(sep);
     }
-
 };
+
+
+// template <>
+// template <typename Stream> 
+// auto value<int>::parse(Stream& stream) const 
+// -> int 
+// { return parse_integral<int>( stream ); }
 
 template <>
 template <typename Stream> 
-auto value<int>::parse(Stream& stream) const 
--> int {
-    char c;
-    int value = 0;
-    stream >> c;
-    if ( !isdigit(c) ) { 
-        throw std::runtime_error("parse_error");
-    } else {
-        value = (c-'0');
-    }
+auto value<unsigned int>::parse(Stream& stream) const 
+-> unsigned int 
+{ return parse_integral<unsigned int>( stream ); }
 
-    while( !stream.empty() ) {
-        stream >> c;
-        if ( isdigit(c) ) {
-            value = value*10 + (c-'0');
-        } else { 
-            stream.back();
-            break;
-        }
-    }
-    return value;
-}
+PARSE_SCHEME(int) { return parse_integral<int>( stream ); }
+PARSE_SCHEME(short) { return parse_integral<short>( stream ); }
+PARSE_SCHEME(unsigned short) { return parse_integral<unsigned short>( stream ); }
+PARSE_SCHEME(long) { return parse_integral<long>( stream ); }
+PARSE_SCHEME(unsigned long) { return parse_integral<unsigned long>( stream ); }
+
+template <>
+template <typename Stream> 
+auto value<float>::parse(Stream& stream) const
+-> float
+{ return parse_floating_point<float>( stream ); }
+
+template <>
+template <typename Stream> 
+auto value<double>::parse(Stream& stream) const
+-> double
+{ return parse_floating_point<double>( stream ); }
 
 }; //namespace Parsec;
