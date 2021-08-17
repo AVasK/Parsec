@@ -306,7 +306,7 @@ struct value : ParseScheme {
 };
 
 struct delimited_string : ParseScheme {
-    enum{ returns_value = true };
+    enum {returns_value = true};
     using ret_type = std::string;
 
     delimited_string(const char * del_seq)
