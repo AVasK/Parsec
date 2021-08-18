@@ -179,9 +179,12 @@ public:
                 return tuple_add(v1, v2);
             }
             else {
+                // !S2::returns_value
+                if (!v2) { throw std::runtime_error("Match error"); }
                 return v1;
             }
         } else {
+            if (!v1) { throw std::runtime_error("Match error"); }
             return v2;
         }
     }
@@ -206,11 +209,19 @@ public:
 
     template <typename Stream>
     auto parse(Stream& stream) const {
-        std::array<typename Scheme::ret_type, Times> arr;
-        for (auto & elem : arr) {
-            elem = scheme.parse( stream );
+        if constexpr ( returns_value ) {
+            std::array<typename Scheme::ret_type, Times> arr;
+            for (auto & elem : arr) {
+                elem = scheme.parse( stream );
+            }
+            return arr;
+        } else {
+            for (size_t i=0; i<Times; ++i) {
+                if ( !scheme.parse( stream ) ) {
+                    throw std::runtime_error("Match error");
+                }
+            }
         }
-        return arr;
     }
 
 private:
@@ -246,6 +257,46 @@ auto operator<< (const char * str, Scheme s)
 }
 
 template <typename T>
+struct Match;
+
+
+template <typename T>
+struct OptionalMatch: ParseScheme {
+    enum {returns_value = false};
+    using ret_type = void;
+    Match<T> match; 
+
+    OptionalMatch(Match<T> m)
+    : match{m} {}
+
+    template <typename Stream>
+    bool parse(Stream& stream) const {
+        match.parse(stream);
+        return true;
+    }
+
+};
+
+template <typename T>
+struct RepeatedMatch: ParseScheme {
+    enum {returns_value = false};
+    using ret_type = void;
+    Match<T> match; 
+
+    RepeatedMatch(Match<T> m)
+    : match{m} {}
+
+    template <typename Stream>
+    bool parse(Stream& stream) const {
+        static_assert(Match<T>::returns_value==false, "Wrong match expression");
+        while( match.parse(stream) ) {}
+        return true;
+    }
+
+};
+
+
+template <typename T>
 struct Match : ParseScheme {
     enum {returns_value = false};
     using ret_type = void;
@@ -254,12 +305,22 @@ struct Match : ParseScheme {
     : val{value}
     {}
 
+    OptionalMatch<T> optional() {
+        return {*this};
+    }
+
+    RepeatedMatch<T> repeated() {
+        return {*this};
+    }
+
     template <typename Stream>
     bool parse(Stream& stream) const {
         std::cout << '"'<<val<<"\"";
-        auto parsed = value<T>().parse(stream);
-        if (parsed != val) {
-            throw std::runtime_error("parse_error");
+        try {
+            auto parsed = value<T>().parse(stream);
+            if (parsed != val) {return false;}
+        } catch(...) {
+            return false;
         }
         return true;
     }
@@ -272,13 +333,18 @@ template <typename Stream>
 auto Match<std::string>::parse(Stream & stream) const
 -> bool {
     char c;
+    auto state = stream.save_state();
     for (auto match_c : val) {
         if ( stream.empty() ) {
-            throw std::runtime_error("match error: stream empty");
+            stream.load_state( state );
+            //throw std::runtime_error("match error: stream empty");
+            return false;
         } else {
             stream >> c;
             if (c != match_c) {
-                throw std::runtime_error("match error");
+                stream.load_state( state );
+                // throw std::runtime_error("match error");
+                return false;
             }
         }
     }
@@ -287,6 +353,8 @@ auto Match<std::string>::parse(Stream & stream) const
 
 template <typename T>
 Match<T> match(T val) {return Match<T>(val);}
+
+Match<std::string> match(const char * s) {return {std::string(s)};}
 
 template <size_t N, typename Scheme>
 Repeat<N,Scheme> repeat(Scheme s) {
